@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "suiteName": "Video Kabul Testleri",
+  "sampleFps": 6,
+  "defaults": {
+    "timeToleranceSeconds": 1.5,
+    "minimumIdentityRecall": 1.0,
+    "minimumTemporalIoU": 0.35,
+    "maximumUnexpectedKnown": 0,
+    "minimumAnonymousRecall": 1.0,
+    "minimumAnonymousTemporalIoU": 0.35,
+    "minimumAnonymousTracks": null,
+    "maximumAnonymousTracks": null,
+    "maximumTracksPerExpectedFace": null,
+    "maximumTotalTracks": null,
+    "maximumShortTracks": null,
+    "maximumRealtimeFactor": null
+  },
+  "cases": [
+    {
+      "id": "ornek-video",
+      "enabled": false,
+      "source": {
+        "processId": "11111111-1111-4111-8111-111111111111",
+        "filename": "ornek.mp4"
+      },
+      "evaluationWindow": {
+        "startSeconds": 0,
+        "endSeconds": 30
+      },
+      "expectedFaces": [
+        {
+          "faceId": "22222222-2222-4222-8222-222222222222",
+          "name": "Ornek Kisi",
+          "intervals": [
+            {
+              "startSeconds": 0,
+              "endSeconds": 5
+            },
+            {
+              "startSeconds": 20,
+              "endSeconds": 30
+            }
+          ]
+        }
+      ],
+      "expectedAnonymousFaces": [
+        {
+          "label": "Unknown visitor",
+          "intervals": [
+            {
+              "startSeconds": 10,
+              "endSeconds": 12
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

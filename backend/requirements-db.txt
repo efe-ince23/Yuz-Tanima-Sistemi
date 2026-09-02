@@ -1,0 +1,7 @@
+SQLAlchemy==2.0.32
+psycopg2-binary==2.9.9
+alembic==1.13.2
+pgvector==0.3.2
+qdrant-client==1.11.3
+minio==7.2.10
+email-validator==2.2.0

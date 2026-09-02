@@ -1,0 +1,32 @@
+# Local secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+
+# Runtime and personal data
+backups/
+datasets/
+data/*
+!data/.gitkeep
+artifacts/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+
+# Frontend
+frontend/dist/
+frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log

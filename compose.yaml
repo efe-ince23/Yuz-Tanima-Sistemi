@@ -1,0 +1,263 @@
+name: yuz-tanima-sistemi
+
+services:
+  database:
+    image: pgvector/pgvector:pg16
+    container_name: yuz-tanima-database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.5
+    container_name: yuz-tanima-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "timeout 5 bash -c '</dev/tcp/127.0.0.1/6333'"
+      interval: 5s
+      timeout: 6s
+      retries: 10
+      start_period: 10s
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: yuz-tanima-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - mc
+        - ready
+        - local
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: yuz-tanima-backend
+    restart: unless-stopped
+    ports:
+      - "${API_HOST_PORT:-8000}:${API_PORT:-8000}"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/benchmark:/app/benchmark:ro
+      - ./backend/tests:/app/tests:ro
+      - ./datasets:/datasets:ro
+      - ./models:/app/models:ro
+      - ./artifacts:/artifacts
+      - "${FACE_DATA_PATH:-./data}:${DATA_ROOT:-/app/data}"
+      - face-models:/root/.insightface
+      - tensorrt-cache:/app/tensorrt-cache
+    environment:
+      PYTHONUNBUFFERED: "1"
+      API_PORT: "${API_PORT:-8000}"
+      FACE_MODEL_NAME: "${FACE_MODEL_NAME:-buffalo_sc}"
+      FACE_ENGINE: "${FACE_ENGINE:-yolo_arcface}"
+      YOLO_FACE_MODEL_PATH: "${YOLO_FACE_MODEL_PATH:-/app/models/yolov8n-face.onnx}"
+      YOLO_FACE_INPUT_SIZE: "${YOLO_FACE_INPUT_SIZE:-640}"
+      YOLO_FACE_CONFIDENCE: "${YOLO_FACE_CONFIDENCE:-0.25}"
+      YOLO_FACE_NMS_THRESHOLD: "${YOLO_FACE_NMS_THRESHOLD:-0.45}"
+      YOLO_FACE_MIN_ASPECT_RATIO: "${YOLO_FACE_MIN_ASPECT_RATIO:-0.40}"
+      YOLO_FACE_MAX_ASPECT_RATIO: "${YOLO_FACE_MAX_ASPECT_RATIO:-1.80}"
+      ARCFACE_MODEL_PATH: "${ARCFACE_MODEL_PATH:-/app/models/arcface-r50-w600k.onnx}"
+      ARCFACE_BATCH_SIZE: "${ARCFACE_BATCH_SIZE:-16}"
+      BENCHMARK_OUTPUT_ROOT: "${BENCHMARK_OUTPUT_ROOT:-/artifacts/benchmarks}"
+      VIDEO_ACCEPTANCE_OUTPUT_ROOT: "${VIDEO_ACCEPTANCE_OUTPUT_ROOT:-/artifacts/video-acceptance/runs}"
+      LFW_PAIRS_FILE: "${LFW_PAIRS_FILE:-/datasets/lfw/pairs.csv}"
+      FACE_ENABLE_TENSORRT: "${FACE_ENABLE_TENSORRT:-true}"
+      ARCFACE_ENABLE_TENSORRT: "${ARCFACE_ENABLE_TENSORRT:-false}"
+      TENSORRT_FP16_ENABLE: "${TENSORRT_FP16_ENABLE:-false}"
+      TENSORRT_CACHE_ROOT: "${TENSORRT_CACHE_ROOT:-/app/tensorrt-cache}"
+      VIDEO_MAX_SIZE_MB: "${VIDEO_MAX_SIZE_MB:-200}"
+      VIDEO_MAX_DURATION_SECONDS: "${VIDEO_MAX_DURATION_SECONDS:-300}"
+      VIDEO_SAMPLE_FPS: "${VIDEO_SAMPLE_FPS:-6}"
+      VIDEO_PROCESSING_CONCURRENCY: "${VIDEO_PROCESSING_CONCURRENCY:-1}"
+      VIDEO_ARCFACE_FRAME_BATCH_SIZE: "${VIDEO_ARCFACE_FRAME_BATCH_SIZE:-1}"
+      VIDEO_TRACK_MAX_GAP_SECONDS: "${VIDEO_TRACK_MAX_GAP_SECONDS:-0.75}"
+      VIDEO_SCENE_CUT_ENABLED: "${VIDEO_SCENE_CUT_ENABLED:-true}"
+      VIDEO_SCENE_CUT_HISTOGRAM_CORRELATION: "${VIDEO_SCENE_CUT_HISTOGRAM_CORRELATION:-0.35}"
+      VIDEO_SCENE_CUT_PIXEL_DIFFERENCE: "${VIDEO_SCENE_CUT_PIXEL_DIFFERENCE:-0.10}"
+      VIDEO_TRACK_MIN_IOU: "${VIDEO_TRACK_MIN_IOU:-0.10}"
+      VIDEO_TRACK_MAX_CENTER_DISTANCE: "${VIDEO_TRACK_MAX_CENTER_DISTANCE:-0.25}"
+      VIDEO_TRACK_MAX_AREA_RATIO: "${VIDEO_TRACK_MAX_AREA_RATIO:-3.0}"
+      VIDEO_TRACK_APPEARANCE_ENABLED: "${VIDEO_TRACK_APPEARANCE_ENABLED:-true}"
+      VIDEO_TRACK_APPEARANCE_MIN_SIMILARITY: "${VIDEO_TRACK_APPEARANCE_MIN_SIMILARITY:-0.20}"
+      VIDEO_TRACK_APPEARANCE_WEIGHT: "${VIDEO_TRACK_APPEARANCE_WEIGHT:-0.45}"
+      VIDEO_TRACK_APPEARANCE_MOMENTUM: "${VIDEO_TRACK_APPEARANCE_MOMENTUM:-0.80}"
+      VIDEO_TRACKER_ENGINE: "${VIDEO_TRACKER_ENGINE:-custom}"
+      VIDEO_BYTETRACK_ACTIVATION_THRESHOLD: "${VIDEO_BYTETRACK_ACTIVATION_THRESHOLD:-0.15}"
+      VIDEO_BYTETRACK_MATCHING_THRESHOLD: "${VIDEO_BYTETRACK_MATCHING_THRESHOLD:-0.90}"
+      VIDEO_BYTETRACK_MINIMUM_CONSECUTIVE_FRAMES: "${VIDEO_BYTETRACK_MINIMUM_CONSECUTIVE_FRAMES:-1}"
+      VIDEO_RECOGNITION_SAMPLES_PER_TRACK: "${VIDEO_RECOGNITION_SAMPLES_PER_TRACK:-3}"
+      VIDEO_RECOGNITION_SAMPLES_PER_WINDOW: "${VIDEO_RECOGNITION_SAMPLES_PER_WINDOW:-3}"
+      VIDEO_RECOGNITION_WINDOW_SECONDS: "${VIDEO_RECOGNITION_WINDOW_SECONDS:-3}"
+      VIDEO_ANONYMOUS_MIN_OBSERVATIONS: "${VIDEO_ANONYMOUS_MIN_OBSERVATIONS:-2}"
+      VIDEO_ANONYMOUS_MIN_QUALITY_SAMPLES: "${VIDEO_ANONYMOUS_MIN_QUALITY_SAMPLES:-3}"
+      VIDEO_ANONYMOUS_MIN_QUALITY: "${VIDEO_ANONYMOUS_MIN_QUALITY:-0.50}"
+      VIDEO_ANONYMOUS_MIN_FRONTAL_SCORE: "${VIDEO_ANONYMOUS_MIN_FRONTAL_SCORE:-0.35}"
+      VIDEO_ANONYMOUS_MIN_DURATION_SECONDS: "${VIDEO_ANONYMOUS_MIN_DURATION_SECONDS:-0.8}"
+      VIDEO_ANONYMOUS_MIN_DETECTION_CONFIDENCE: "${VIDEO_ANONYMOUS_MIN_DETECTION_CONFIDENCE:-0.50}"
+      VIDEO_ANONYMOUS_MIN_FACE_SIZE_PX: "${VIDEO_ANONYMOUS_MIN_FACE_SIZE_PX:-64}"
+      VIDEO_ANONYMOUS_MIN_SHARPNESS: "${VIDEO_ANONYMOUS_MIN_SHARPNESS:-35}"
+      VIDEO_ANONYMOUS_MIN_EMBEDDING_CONSISTENCY: "${VIDEO_ANONYMOUS_MIN_EMBEDDING_CONSISTENCY:-0.35}"
+      VIDEO_ANONYMOUS_SINGLE_MIN_QUALITY: "${VIDEO_ANONYMOUS_SINGLE_MIN_QUALITY:-0.60}"
+      VIDEO_ANONYMOUS_SINGLE_MIN_FRONTAL_SCORE: "${VIDEO_ANONYMOUS_SINGLE_MIN_FRONTAL_SCORE:-0.65}"
+      VIDEO_ANONYMOUS_SINGLE_MIN_DETECTION_CONFIDENCE: "${VIDEO_ANONYMOUS_SINGLE_MIN_DETECTION_CONFIDENCE:-0.75}"
+      VIDEO_ANONYMOUS_SINGLE_MIN_FACE_SIZE_PX: "${VIDEO_ANONYMOUS_SINGLE_MIN_FACE_SIZE_PX:-80}"
+      VIDEO_ANONYMOUS_SHORT_MIN_OBSERVATIONS: "${VIDEO_ANONYMOUS_SHORT_MIN_OBSERVATIONS:-4}"
+      VIDEO_ANONYMOUS_SHORT_MIN_DURATION_SECONDS: "${VIDEO_ANONYMOUS_SHORT_MIN_DURATION_SECONDS:-0.5}"
+      VIDEO_ANONYMOUS_SINGLE_MIN_SHARPNESS: "${VIDEO_ANONYMOUS_SINGLE_MIN_SHARPNESS:-55}"
+      VIDEO_RECOGNITION_STRONG_MATCH_MARGIN: "${VIDEO_RECOGNITION_STRONG_MATCH_MARGIN:-0.08}"
+      VIDEO_RECOGNITION_WEAK_MATCH_MIN_DURATION_SECONDS: "${VIDEO_RECOGNITION_WEAK_MATCH_MIN_DURATION_SECONDS:-1.0}"
+      VIDEO_RECOGNITION_SHORT_KNOWN_MIN_DETECTION_CONFIDENCE: "${VIDEO_RECOGNITION_SHORT_KNOWN_MIN_DETECTION_CONFIDENCE:-0.50}"
+      VIDEO_RECOGNITION_BRIDGE_WINDOW_COUNT: "${VIDEO_RECOGNITION_BRIDGE_WINDOW_COUNT:-1}"
+      VIDEO_RECOGNITION_CONTINUITY_WINDOWS: "${VIDEO_RECOGNITION_CONTINUITY_WINDOWS:-4}"
+      VIDEO_RECOGNITION_CONTINUITY_THRESHOLD: "${VIDEO_RECOGNITION_CONTINUITY_THRESHOLD:-0.30}"
+      VIDEO_RECOGNITION_CONTINUITY_DISTANCE_PENALTY: "${VIDEO_RECOGNITION_CONTINUITY_DISTANCE_PENALTY:-0.03}"
+      VIDEO_REID_GALLERY_SIZE: "${VIDEO_REID_GALLERY_SIZE:-5}"
+      VIDEO_REID_MIN_SIMILARITY: "${VIDEO_REID_MIN_SIMILARITY:-0.30}"
+      VIDEO_ALLOWED_CONTENT_TYPES: "${VIDEO_ALLOWED_CONTENT_TYPES:-video/mp4}"
+      VIDEO_ALLOWED_CONTAINERS: "${VIDEO_ALLOWED_CONTAINERS:-mp4}"
+      VIDEO_ALLOWED_CODECS: "${VIDEO_ALLOWED_CODECS:-h264}"
+      FACE_MATCH_THRESHOLD: "${FACE_MATCH_THRESHOLD:-0.45}"
+      FACE_ANONYMOUS_MATCH_THRESHOLD: "${FACE_ANONYMOUS_MATCH_THRESHOLD:-0.45}"
+      ANONYMOUS_FACE_MAX_SAMPLES: "${ANONYMOUS_FACE_MAX_SAMPLES:-5}"
+      ANONYMOUS_FACE_DUPLICATE_THRESHOLD: "${ANONYMOUS_FACE_DUPLICATE_THRESHOLD:-0.98}"
+      FACE_DUPLICATE_THRESHOLD: "${FACE_DUPLICATE_THRESHOLD:-0.55}"
+      PRIMARY_FACE_DOMINANCE_RATIO: "${PRIMARY_FACE_DOMINANCE_RATIO:-2.0}"
+      DATA_ROOT: "${DATA_ROOT:-/app/data}"
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      QDRANT_PREFER_GRPC: "${QDRANT_PREFER_GRPC:-true}"
+      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-face_embeddings_arcface_r50_v1}"
+      FACE_VECTOR_SIZE: "${FACE_VECTOR_SIZE:-512}"
+      QDRANT_INDEXING_THRESHOLD_KB: "${QDRANT_INDEXING_THRESHOLD_KB:-1000}"
+      QDRANT_FULL_SCAN_THRESHOLD_KB: "${QDRANT_FULL_SCAN_THRESHOLD_KB:-1000}"
+      FACE_EMBEDDING_MODEL_VERSION: "${FACE_EMBEDDING_MODEL_VERSION:-arcface_r50_w600k_v1}"
+      QDRANT_UPSERT_BATCH_SIZE: "${QDRANT_UPSERT_BATCH_SIZE:-256}"
+      LFW_DATASET_ROOT: "${LFW_DATASET_ROOT:-/datasets/lfw/lfw-deepfunneled/lfw-deepfunneled}"
+      OBJECT_STORAGE_BACKEND: "${OBJECT_STORAGE_BACKEND:-minio}"
+      MINIO_ENDPOINT: "${MINIO_ENDPOINT:-minio:9000}"
+      MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY}"
+      MINIO_SECRET_KEY: "${MINIO_SECRET_KEY}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-face-images}"
+      MINIO_SECURE: "${MINIO_SECURE:-false}"
+      MIGRATE_LEGACY_OBJECTS_ON_STARTUP: "${MIGRATE_LEGACY_OBJECTS_ON_STARTUP:-false}"
+      AUTH_SECRET_KEY: "${AUTH_SECRET_KEY}"
+      AUTH_ACCESS_MINUTES: "${AUTH_ACCESS_MINUTES:-30}"
+      AUTH_REFRESH_DAYS: "${AUTH_REFRESH_DAYS:-7}"
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
+      ADMIN_INITIAL_USERNAME: "${ADMIN_INITIAL_USERNAME:-admin}"
+      ADMIN_INITIAL_EMAIL: "${ADMIN_INITIAL_EMAIL:-admin@yuztanima.local}"
+      ADMIN_INITIAL_FULL_NAME: "${ADMIN_INITIAL_FULL_NAME:-Sistem Yoneticisi}"
+      ADMIN_INITIAL_PASSWORD: "${ADMIN_INITIAL_PASSWORD}"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+    depends_on:
+      database:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    gpus: all
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import os, urllib.request; urllib.request.urlopen('http://localhost:' + os.environ.get('API_PORT', '8000') + '/health')"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 120s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: yuz-tanima-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    environment:
+      BACKEND_URL: "http://backend:${API_PORT:-8000}"
+      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-face_embeddings_arcface_r50_v1}"
+      E2E_ADMIN_USERNAME: "${ADMIN_INITIAL_USERNAME:-admin}"
+      E2E_ADMIN_PASSWORD: "${ADMIN_INITIAL_PASSWORD}"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget --quiet --spider http://127.0.0.1:3000/"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: yuz-tanima-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      database:
+        condition: service_healthy
+
+volumes:
+  face-models:
+    name: yuz-tanima-face-models
+  postgres-data:
+    name: yuz-tanima-postgres-data
+  pgadmin-data:
+    name: yuz-tanima-pgadmin-data
+  qdrant-data:
+    name: yuz-tanima-qdrant-data
+  minio-data:
+    name: yuz-tanima-minio-data
+  tensorrt-cache:
+    name: yuz-tanima-tensorrt-cache

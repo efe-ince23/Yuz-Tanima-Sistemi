@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Yuz Tanima Sistemi",
+      "Group": "Docker",
+      "Host": "database",
+      "Port": 5432,
+      "MaintenanceDB": "yuz_tanima",
+      "Username": "yuz_tanima_user",
+      "SSLMode": "prefer"
+    }
+  }
+}

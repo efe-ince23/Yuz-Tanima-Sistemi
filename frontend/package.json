@@ -1,0 +1,25 @@
+{
+  "name": "yuz-tanima-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "lucide-react": "1.31.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "typescript": "7.0.2",
+    "vite": "8.2.1"
+  }
+}
