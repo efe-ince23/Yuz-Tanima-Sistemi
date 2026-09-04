@@ -129,6 +129,70 @@ class VideoResultPersistenceTests(unittest.TestCase):
         observations = session.add_all.call_args.args[0]
         self.assertEqual(len(observations), 3)
 
+    def test_live_segments_tolerate_one_missed_sample(self):
+        process_id = UUID("45454545-4545-4545-8545-454545454545")
+        face_id = UUID("56565656-5656-4565-8565-565656565656")
+        process = RecognitionProcess(
+            process_id=process_id,
+            operation_type="video_recognize",
+            status="processing",
+        )
+        job = VideoJob(
+            process_id=process_id,
+            status="processing",
+            original_filename="canli-tek-kacirma.mp4",
+            object_path=f"videos/{process_id}/source.mp4",
+            content_type="video/mp4",
+            file_size_bytes=100,
+            duration_seconds=5.0,
+            source_fps=25.0,
+        )
+        session = MagicMock()
+
+        def assign_track_id():
+            for call in session.add.call_args_list:
+                item = call.args[0]
+                if isinstance(item, VideoTrack) and item.id is None:
+                    item.id = 1
+
+        session.flush.side_effect = assign_track_id
+        manifest = {
+            "duration_ms": 5000,
+            "analysis_count": 4,
+            "first_analysis_ms": 250,
+            "last_analysis_ms": 4800,
+            "observations": [
+                {
+                    "timestamp_ms": timestamp,
+                    "face_id": str(face_id),
+                    "status": "known",
+                    "name": "Test Kisi",
+                    "metadata": None,
+                    "bounding_box": {
+                        "x1": 0.1,
+                        "y1": 0.2,
+                        "x2": 0.4,
+                        "y2": 0.6,
+                    },
+                    "detection_confidence": 0.95,
+                    "recognition_confidence": 0.88,
+                    "matched_image_url": None,
+                }
+                for timestamp in (250, 1400, 3650, 4800)
+            ],
+        }
+
+        used = _persist_live_manifest(session, job, process, manifest)
+
+        self.assertTrue(used)
+        segments = [
+            call.args[0]
+            for call in session.add.call_args_list
+            if isinstance(call.args[0], VideoAppearanceSegment)
+        ]
+        self.assertEqual(len(segments), 1)
+        self.assertEqual((segments[0].start_ms, segments[0].end_ms), (0, 5000))
+
     def test_normalizes_a_queued_live_recording_before_face_analysis(self):
         process_id = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
         process = RecognitionProcess(

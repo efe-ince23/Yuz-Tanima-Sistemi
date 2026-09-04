@@ -35,7 +35,7 @@ from app.video_upload import normalize_live_recording
 logger = logging.getLogger(__name__)
 
 LIVE_OBSERVATION_MAX_GAP_MS = 2500
-LIVE_OBSERVATION_GAP_MULTIPLIER = 1.8
+LIVE_OBSERVATION_GAP_MULTIPLIER = 2.4
 
 
 class VideoProcessingError(RuntimeError):
