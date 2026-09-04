@@ -301,6 +301,11 @@ function LiveVideoRecognition({ onClose, onRecordingReady }: LiveVideoRecognitio
         );
         activeRequest = null;
         if (cancelled) return;
+        // Keep model warm-up outside the saved video timeline. The first request can
+        // take several seconds while the inference providers initialize.
+        if (recordingStartedAtRef.current == null && streamRef.current) {
+          startRecording(streamRef.current);
+        }
         const observations = response.faces.map<LiveVideoObservation>((face) => {
           const sourceLeft = Math.min(1, Math.max(0, face.bounding_box.x1 / captured.width));
           const sourceRight = Math.min(1, Math.max(0, face.bounding_box.x2 / captured.width));
@@ -359,7 +364,7 @@ function LiveVideoRecognition({ onClose, onRecordingReady }: LiveVideoRecognitio
       if (timer !== undefined) window.clearTimeout(timer);
       setAnalyzing(false);
     };
-  }, [cameraError, facingMode, ready, running]);
+  }, [cameraError, facingMode, ready, running, startRecording]);
 
   const switchCamera = async () => {
     if (recording || saving) return;
@@ -462,7 +467,6 @@ function LiveVideoRecognition({ onClose, onRecordingReady }: LiveVideoRecognitio
               }
               setReady(true);
               setLoading(false);
-              if (streamRef.current) startRecording(streamRef.current);
             }}
           />
 

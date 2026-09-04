@@ -275,6 +275,7 @@ test("runs live camera recognition inside the video screen", async ({ page }) =>
   await page.route("**/api/faces/identify", async (route) => {
     recognitionRequests += 1;
     expect(route.request().headers()["x-recognition-source"]).toBe("live_video_frame");
+    if (recognitionRequests === 1) await new Promise((resolve) => setTimeout(resolve, 1200));
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -328,6 +329,7 @@ test("runs live camera recognition inside the video screen", async ({ page }) =>
   const dialog = page.getByRole("dialog", { name: "Canlı kamera analizi" });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator("video")).toBeVisible();
+  await expect(dialog.locator(".live-recording-indicator")).toHaveCount(0);
   await expect(dialog.locator(".live-face-box.known")).toContainText("Fatih Terim");
   await expect(dialog.locator(".live-face-list")).toContainText("Bilinen kişi");
   await expect(dialog.locator(".live-process-id")).toContainText(
