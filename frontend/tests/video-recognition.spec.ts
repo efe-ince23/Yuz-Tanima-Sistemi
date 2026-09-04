@@ -206,6 +206,11 @@ test("uploads and follows a video job through the interface", async ({ page }) =
     () => page.locator(".video-drop-zone video").evaluate((video) => video.currentTime),
   ).toBeCloseTo(1.5, 1);
   await page.locator(".video-drop-zone video").evaluate((video) => {
+    Object.defineProperty(video, "currentTime", { configurable: true, value: 0.25 });
+    video.dispatchEvent(new Event("timeupdate"));
+  });
+  await expect(page.locator(".video-face-box.known")).toContainText("Fatih Terim");
+  await page.locator(".video-drop-zone video").evaluate((video) => {
     Object.defineProperty(video, "currentTime", { configurable: true, value: 0.5 });
     video.dispatchEvent(new Event("timeupdate"));
   });

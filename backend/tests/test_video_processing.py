@@ -123,7 +123,9 @@ class VideoResultPersistenceTests(unittest.TestCase):
         ]
         self.assertEqual(len(tracks), 1)
         self.assertEqual(tracks[0].best_image_path, "persons/1/test.jpg")
-        self.assertEqual(len(segments), 3)
+        self.assertEqual(len(segments), 2)
+        self.assertEqual((segments[0].start_ms, segments[0].end_ms), (0, 1834))
+        self.assertEqual((segments[1].start_ms, segments[1].end_ms), (3166, 4834))
         observations = session.add_all.call_args.args[0]
         self.assertEqual(len(observations), 3)
 

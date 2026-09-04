@@ -34,6 +34,9 @@ from app.video_upload import normalize_live_recording
 
 logger = logging.getLogger(__name__)
 
+LIVE_OBSERVATION_MAX_GAP_MS = 2500
+LIVE_OBSERVATION_GAP_MULTIPLIER = 1.8
+
 
 class VideoProcessingError(RuntimeError):
     def __init__(self, code: str, message: str):
@@ -370,7 +373,25 @@ def _persist_live_manifest(
 
     session.execute(delete(VideoTrack).where(VideoTrack.process_id == job.process_id))
     session.flush()
-    max_gap_ms = get_video_tracking_settings().max_gap_ms
+    base_max_gap_ms = get_video_tracking_settings().max_gap_ms
+    estimated_sample_interval_ms = max(
+        1,
+        round(duration_ms / max(1, analysis_count)),
+    )
+    max_gap_ms = min(
+        LIVE_OBSERVATION_MAX_GAP_MS,
+        max(
+            base_max_gap_ms,
+            round(
+                estimated_sample_interval_ms
+                * LIVE_OBSERVATION_GAP_MULTIPLIER
+            ),
+        ),
+    )
+    segment_padding_ms = min(
+        max_gap_ms // 2,
+        max(100, round(estimated_sample_interval_ms / 2)),
+    )
     source_fps = job.source_fps or 25.0
     result_tracks: List[Dict[str, object]] = []
     total_observations = 0
@@ -462,6 +483,11 @@ def _persist_live_manifest(
             else:
                 groups[-1].append(prepared_item)
         for group in groups:
+            segment_start_ms = max(0, group[0][1] - segment_padding_ms)
+            segment_end_ms = min(
+                duration_ms,
+                group[-1][1] + segment_padding_ms,
+            )
             recognition_scores = [
                 float(item[0]["recognition_confidence"])
                 for item in group
@@ -473,10 +499,16 @@ def _persist_live_manifest(
                     track_id=track.id,
                     face_id=face_id,
                     face_status=face_status,
-                    start_ms=group[0][1],
-                    end_ms=group[-1][1],
-                    start_frame=group[0][2],
-                    end_frame=group[-1][2],
+                    start_ms=segment_start_ms,
+                    end_ms=segment_end_ms,
+                    start_frame=max(
+                        0,
+                        round(segment_start_ms * source_fps / 1000),
+                    ),
+                    end_frame=max(
+                        0,
+                        round(segment_end_ms * source_fps / 1000),
+                    ),
                     observation_count=len(group),
                     max_recognition_confidence=(
                         max(recognition_scores) if recognition_scores else None

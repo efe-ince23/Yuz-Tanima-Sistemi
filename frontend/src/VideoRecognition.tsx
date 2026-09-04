@@ -47,7 +47,7 @@ import LiveVideoRecognition from "./LiveVideoRecognition";
 const MAX_VIDEO_SIZE = 200 * 1024 * 1024;
 const POLL_INTERVAL_MS = 1000;
 const OBSERVATION_EDGE_TOLERANCE_MS = 90;
-const MAX_OBSERVATION_INTERPOLATION_MS = 400;
+const MAX_OBSERVATION_INTERPOLATION_MS = 2500;
 const HISTORY_PAGE_SIZE = 20;
 
 interface VideoViewport {
@@ -104,10 +104,10 @@ function boxAtTime(track: VideoTrackResult, timestampMs: number): VideoBoundingB
 
   const first = observations[0];
   const last = observations[observations.length - 1];
-  if (
+  if (!activeAppearance && (
     timestampMs < first.timestamp_ms - OBSERVATION_EDGE_TOLERANCE_MS
     || timestampMs > last.timestamp_ms + OBSERVATION_EDGE_TOLERANCE_MS
-  ) return null;
+  )) return null;
   if (timestampMs <= first.timestamp_ms) return first.bounding_box;
   if (timestampMs >= last.timestamp_ms) return last.bounding_box;
 
